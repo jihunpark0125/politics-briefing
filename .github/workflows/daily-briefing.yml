@@ -3,7 +3,6 @@ name: 정치 모닝 브리핑
 on:
   schedule:
     # UTC 23:05 = 한국시간 오전 08:05
-    # 경제 브리핑과 OpenAI 호출이 겹치지 않도록 시간을 분리합니다.
     - cron: "5 23 * * *"
   workflow_dispatch: {}
 
@@ -14,7 +13,7 @@ permissions:
 
 concurrency:
   group: politics-briefing-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -27,6 +26,8 @@ jobs:
     steps:
       - name: 저장소 불러오기
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Python 준비
         uses: actions/setup-python@v6
@@ -48,19 +49,48 @@ jobs:
         run: python main.py
 
       - name: 생성된 페이지와 아카이브를 저장소에 기록
+        shell: bash
         run: |
+          set -euo pipefail
+
           git config user.name "politics-briefing-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/
-          if git diff --cached --quiet; then
-            echo "변경 사항 없음 - 커밋 생략"
-          else
+
+          GENERATED_DIR="$(mktemp -d)"
+          cp -a docs "$GENERATED_DIR/docs"
+
+          for attempt in 1 2 3; do
+            echo "브리핑 업로드 시도 ${attempt}/3"
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            rm -rf docs
+            cp -a "$GENERATED_DIR/docs" docs
+
+            git add docs/
+
+            if git diff --cached --quiet; then
+              echo "변경 사항 없음 - 커밋 생략"
+              exit 0
+            fi
+
             git commit -m "정치 브리핑 업데이트 $(TZ=Asia/Seoul date +%Y-%m-%d)"
-            git push
-          fi
+
+            if git push origin HEAD:main; then
+              echo "정치 브리핑 커밋 완료"
+              exit 0
+            fi
+
+            echo "원격 main 변경 감지 - 최신 상태를 가져와 다시 시도합니다."
+            sleep $((attempt * 5))
+          done
+
+          echo "3회 재시도 후에도 push에 실패했습니다."
+          exit 1
 
       - name: GitHub Pages 설정
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: 정적 페이지 업로드
         uses: actions/upload-pages-artifact@v4
