@@ -1,9 +1,11 @@
 name: 정치 모닝 브리핑
 
 on:
-  schedule:
-    # UTC 23:05 = 한국시간 오전 08:05
-    - cron: "5 23 * * *"
+  # 자동 스케줄 중단 (2026-08-30, OpenAI API 토큰 비용 절감).
+  # 필요 시 아래 schedule 블록의 주석을 해제해 재개하세요.
+  # schedule:
+  #   # UTC 23:05 = 한국시간 오전 08:05
+  #   - cron: "5 23 * * *"
   workflow_dispatch: {}
 
 permissions:
